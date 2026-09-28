@@ -54,6 +54,67 @@ export class CRMController {
     }
   }
 
+  public registrarUsuarioAsync(nuevoUsuario: Usuario): Promise<boolean> {
+    return new Promise((resolve) => {
+      console.log(
+        `[NETWORK]: Conectando con el servidor escolar para registrar a ${nuevoUsuario.id}...`,
+      );
+
+      // Simulamos un retraso de red de 2 segundos (2000 milisegundos)
+      setTimeout(() => {
+        // 1. Validamos si el ID ya existe en nuestro array privado
+        const idDuplicado = this.usuarioDelCentro.some(
+          (user) => user.id === nuevoUsuario.id,
+        );
+
+        if (idDuplicado) {
+          console.error(`❌ Error: El usuario con ID [${nuevoUsuario.id}] ya existe en el SchoolCRM.`);
+          return; // Cortamos la ejecución para no añadirlo
+        }
+
+
+        this.usuarioDelCentro.push(nuevoUsuario);
+        localStorage.setItem(
+          this.CLAVE_STORAGE,
+          JSON.stringify(this.usuarioDelCentro),
+        );
+
+        // La operación ha terminado con éxito: resolvemos la promesa
+        resolve(true);
+      }, 2000);
+    });
+  }
+
+  public registrarSancionAsync(
+    alumnoId: string,
+    profesorId: string,
+    tipo: "comportamiento" | "expulsion",
+    descripcion: string,
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const sanciones = JSON.parse(
+          localStorage.getItem("school_crm_sanciones") ?? "[]",
+        );
+
+        sanciones.push({
+          id: crypto.randomUUID(),
+          alumnoId,
+          profesorId,
+          tipo,
+          descripcion,
+          fecha: new Date().toISOString(),
+        });
+
+        localStorage.setItem(
+          "school_crm_sanciones",
+          JSON.stringify(sanciones),
+        );
+        resolve();
+      }, 1500);
+    });
+  }
+
   // Métodos: Funcione de ayer qeu estaba en counter.ts, ahora en la clase CrmController convertida en un método de la clase.
   filtrarUsuariosPorRol(rolBuscado: Rol): Usuario[] {
     return this.usuarioDelCentro.filter(
@@ -70,20 +131,6 @@ export class CRMController {
 
   verVersion(): string {
     return this.version;
-  }
-
-  agregarUsuario(nuevoUsuario: Usuario): string {
-    const idDuplicado = this.usuarioDelCentro.some(
-      (usuario) => usuario.id === nuevoUsuario.id,
-    );
-
-    if (idDuplicado) {
-      return "El id " + nuevoUsuario.id + " ya está ocupado.";
-    }
-
-    this.usuarioDelCentro.push(nuevoUsuario);
-    this.guardarEnDisco();
-    return "El usuario " + nuevoUsuario.nombre + " se ha agregado correctamente.";
   }
 
   private guardarEnDisco(): void {
