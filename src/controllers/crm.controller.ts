@@ -1,142 +1,147 @@
-import type { Usuario, Rol } from "../models/interfaces";
+import type {
+  Asistencia,
+  DiaSemana,
+  EstadoAsistencia,
+  FranjaHoraria,
+  RegistroHorario,
+  RolUsuario,
+  Sancion,
+  TipoSancion,
+  Usuario,
+} from "../models/interfaces";
+import { StorageService } from "../services/storage.service";
 
 export class CRMController {
-  // Propiedades
-  private usuarioDelCentro: Usuario[] = [];
-  private readonly CLAVE_STORAGE = "school_crm_usuarios";
+  private readonly asistenciaStorage = new StorageService<Asistencia>("crm_asistencias");
+  private readonly sancionesStorage = new StorageService<Sancion>("crm_sanciones");
+  private readonly horariosStorage = new StorageService<RegistroHorario>("crm_horarios");
+  private readonly usuariosStorage = new StorageService<Usuario>("crm_usuarios");
 
-  //Constructor
-  constructor(private version: string = "1.0.0") {
-    const datosLocales = localStorage.getItem(this.CLAVE_STORAGE);
+  constructor(private version: string = "1.0.0") {}
 
-    if (datosLocales) {
-      this.usuarioDelCentro = JSON.parse(datosLocales);
-    } else {
-      this.usuarioDelCentro = [
-        {
-          id: 1,
-          nombre: "Juan Pérez",
-          rol: "profesor",
-          activo: true,
-        },
-        {
-          id: 2,
-          nombre: "María López",
-          rol: "alumno",
-          activo: true,
-        },
-        {
-          id: 3,
-          nombre: "Carlos García",
-          rol: "administrador",
-          activo: true,
-        },
-        {
-          id: 4,
-          nombre: "Ana Torres",
-          rol: "profesor",
-          activo: false,
-        },
-        {
-          id: 5,
-          nombre: "Luis Fernández",
-          rol: "alumno",
-          activo: false,
-        },
-        {
-          id: 6,
-          nombre: "Elena Martínez",
-          rol: "administrador",
-          activo: false,
-        },
-      ];
-      this.guardarEnDisco();
-    }
+  public async registrarAsistencia(
+    alumnoId: string,
+    profesorId: string,
+    franja: FranjaHoraria,
+    estado: EstadoAsistencia,
+    fecha: string = new Date().toISOString().slice(0, 10),
+  ): Promise<boolean> {
+    await this.simularRed();
+    const asistencias = await this.asistenciaStorage.getAll();
+    const existeRegistro = asistencias.some(
+      (asistencia) =>
+        asistencia.alumnoId === alumnoId &&
+        asistencia.fecha === fecha &&
+        asistencia.franja === franja,
+    );
+
+    if (existeRegistro) return false;
+
+    await this.asistenciaStorage.add({
+      id: crypto.randomUUID(),
+      alumnoId,
+      profesorId,
+      fecha,
+      franja,
+      estado,
+    });
+    return true;
   }
 
-  public registrarUsuarioAsync(nuevoUsuario: Usuario): Promise<boolean> {
-    return new Promise((resolve) => {
-      console.log(
-        `[NETWORK]: Conectando con el servidor escolar para registrar a ${nuevoUsuario.id}...`,
-      );
-
-      // Simulamos un retraso de red de 2 segundos (2000 milisegundos)
-      setTimeout(() => {
-        // 1. Validamos si el ID ya existe en nuestro array privado
-        const idDuplicado = this.usuarioDelCentro.some(
-          (user) => user.id === nuevoUsuario.id,
-        );
-
-        if (idDuplicado) {
-          console.error(`❌ Error: El usuario con ID [${nuevoUsuario.id}] ya existe en el SchoolCRM.`);
-          return; // Cortamos la ejecución para no añadirlo
-        }
-
-
-        this.usuarioDelCentro.push(nuevoUsuario);
-        localStorage.setItem(
-          this.CLAVE_STORAGE,
-          JSON.stringify(this.usuarioDelCentro),
-        );
-
-        // La operación ha terminado con éxito: resolvemos la promesa
-        resolve(true);
-      }, 2000);
+  public async registrarSancion(
+    alumnoId: string,
+    profesorId: string,
+    tipo: TipoSancion,
+    descripcion: string,
+  ): Promise<void> {
+    await this.simularRed();
+    await this.sancionesStorage.add({
+      id: crypto.randomUUID(),
+      alumnoId,
+      profesorId,
+      fecha: new Date().toISOString(),
+      tipo,
+      descripcion,
     });
+  }
+
+  public async comprobarConflictoProfesor(
+    profesorId: string,
+    dia: DiaSemana,
+    franja: FranjaHoraria,
+  ): Promise<boolean> {
+    await this.simularRed();
+    const horarios = await this.horariosStorage.getAll();
+    return horarios.some(
+      (horario) =>
+        horario.profesorId === profesorId &&
+        horario.dia === dia &&
+        horario.franja === franja,
+    );
+  }
+
+  public async registrarHorario(horario: RegistroHorario): Promise<boolean> {
+    const hayConflicto = await this.comprobarConflictoProfesor(
+      horario.profesorId,
+      horario.dia,
+      horario.franja,
+    );
+    if (hayConflicto) return false;
+
+    await this.horariosStorage.add(horario);
+    return true;
+  }
+
+  public async obtenerInformeAlumno(
+    alumnoId: string,
+  ): Promise<{ faltas: number; retrasos: number; sanciones: number }> {
+    await this.simularRed();
+    const [asistencias, sanciones] = await Promise.all([
+      this.asistenciaStorage.getAll(),
+      this.sancionesStorage.getAll(),
+    ]);
+    const asistenciasAlumno = asistencias.filter(
+      (asistencia) => asistencia.alumnoId === alumnoId,
+    );
+
+    return {
+      faltas: asistenciasAlumno.filter((asistencia) => asistencia.estado === "falta").length,
+      retrasos: asistenciasAlumno.filter((asistencia) => asistencia.estado === "retraso").length,
+      sanciones: sanciones.filter((sancion) => sancion.alumnoId === alumnoId).length,
+    };
+  }
+
+  public async registrarUsuarioAsync(nuevoUsuario: Usuario): Promise<boolean> {
+    await this.simularRed();
+    const usuarios = await this.usuariosStorage.getAll();
+    if (usuarios.some((usuario) => usuario.id === nuevoUsuario.id)) return false;
+    await this.usuariosStorage.add(nuevoUsuario);
+    return true;
+  }
+
+  public async obtenerUsuariosPorRol(rol: RolUsuario): Promise<Usuario[]> {
+    const usuarios = await this.usuariosStorage.getAll();
+    return usuarios.filter((usuario) => usuario.rol === rol);
   }
 
   public registrarSancionAsync(
     alumnoId: string,
     profesorId: string,
-    tipo: "comportamiento" | "expulsion",
+    tipo: TipoSancion,
     descripcion: string,
   ): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        const sanciones = JSON.parse(
-          localStorage.getItem("school_crm_sanciones") ?? "[]",
-        );
-
-        sanciones.push({
-          id: crypto.randomUUID(),
-          alumnoId,
-          profesorId,
-          tipo,
-          descripcion,
-          fecha: new Date().toISOString(),
-        });
-
-        localStorage.setItem(
-          "school_crm_sanciones",
-          JSON.stringify(sanciones),
-        );
-        resolve();
-      }, 1500);
-    });
+    return this.registrarSancion(alumnoId, profesorId, tipo, descripcion);
   }
 
-  // Métodos: Funcione de ayer qeu estaba en counter.ts, ahora en la clase CrmController convertida en un método de la clase.
-  filtrarUsuariosPorRol(rolBuscado: Rol): Usuario[] {
-    return this.usuarioDelCentro.filter(
-      (usuario) => usuario.rol === rolBuscado,
-    );
-  }
-
-  obtenerUsuariosPorRol(rolBuscado: Rol): Usuario[] {
-    return this.filtrarUsuariosPorRol(rolBuscado);
-  }
-  actualizarVersion(nuevaVersion: string): void {
+  public actualizarVersion(nuevaVersion: string): void {
     this.version = nuevaVersion;
   }
 
-  verVersion(): string {
+  public verVersion(): string {
     return this.version;
   }
 
-  private guardarEnDisco(): void {
-    localStorage.setItem(
-      this.CLAVE_STORAGE,
-      JSON.stringify(this.usuarioDelCentro),
-    );
+  private async simularRed(): Promise<void> {
+    await new Promise<void>((resolve) => setTimeout(resolve, 300));
   }
 }

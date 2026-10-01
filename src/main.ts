@@ -1,40 +1,45 @@
-import {CRMController} from './controllers/crm.controller';
+import { CRMController } from "./controllers/crm.controller";
 
-// Instanciamos el motor (creamos el objeto en memoria)
-const miEscuelaCRM = new CRMController("1.0.0");
+const crm = new CRMController();
 
+async function ejecutarPrueba(): Promise<void> {
+    console.log("=== Iniciando simulación de SchoolCRM ===");
 
- async function addUsuario() {
-    console.log("Agregando un nuevo usuario...");
-    let guardaConExito =  false;
-    guardaConExito = await miEscuelaCRM.registrarUsuarioAsync({ id: 8, nombre: "Ana Torres", rol: "alumno", activo: true });
-    if (guardaConExito) {
-        console.log("Usuario agregado con éxito.");
-    } else {
-        console.log("Error al agregar el usuario.");
-    }
-}
-
-addUsuario();
-
-async function registrarSancion() {
     try {
-        await miEscuelaCRM.registrarSancionAsync(
-            "2",
-            "1",
+        const asistenciaRegistrada = await crm.registrarAsistencia(
+            "alumno-1",
+            "profesor-1",
+            "1ª Hora",
+            "falta",
+        );
+          const horarioRegistrado = await crm.registrarHorario({
+              dia: "Lunes",
+              franja: "1ª Hora",
+              cursoId: "curso-1",
+              asignaturaId: "asignatura-1",
+              profesorId: "profesor-1",
+              aula: "Aula 1",
+          });
+        const conflicto = await crm.comprobarConflictoProfesor(
+            "profesor-1",
+            "Lunes",
+            "1ª Hora",
+        );
+        await crm.registrarSancion(
+            "alumno-1",
+            "profesor-1",
             "comportamiento",
             "Interrumpe repetidamente la clase.",
         );
-        console.log("Sanción registrada con éxito.");
+        const informe = await crm.obtenerInformeAlumno("alumno-1");
+
+          console.log("Horario registrado:", horarioRegistrado);
+        console.log("Asistencia registrada:", asistenciaRegistrada);
+        console.log("¿Hay conflicto horario?:", conflicto);
+        console.log("Informe del alumno:", informe);
     } catch (error) {
-        console.error("No se pudo registrar la sanción.", error);
+        console.error("Error en la ejecución:", error);
     }
 }
 
-registrarSancion();
-
-console.log("Versión del CRM:", miEscuelaCRM.verVersion());
-// Usamos sus métodos
-const profesores = miEscuelaCRM.filtrarUsuariosPorRol("profesor");
-
-console.log("Profesores del centro:", profesores);
+void ejecutarPrueba();
